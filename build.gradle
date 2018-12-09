@@ -1,0 +1,48 @@
+// 注意，这个文件是Gradle构建脚本，是脚本，里面的代码是先后执行的。至少`buildscript`要放在`apply plugin`的前面。
+// 构建脚本
+buildscript {
+    // 插件依赖
+    dependencies {
+        // Kotlin插件对应的包
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.10"
+    }
+
+    // 插件仓库。墙外人可直接用`mavencentral`、`jcenter`
+    repositories {
+        // 阿里的Maven中心仓库镜像
+        maven { url "https://maven.aliyun.com/repository/central" }
+        // 阿里的jCenter镜像
+        maven { url "https://maven.aliyun.com/repository/jcenter" }
+    }
+}
+
+// 此插件添加了 `gradle run` 命令，通过Gradle运行项目
+apply plugin: 'application'
+// 此插件对Kotlin语言提供了支持，可以编译Kotlin文件
+apply plugin: 'kotlin'
+
+// application插件run的入口class
+mainClassName = 'AppKt'
+
+// 项目依赖
+dependencies {
+    // Kotlin分为两部分，语言部分和库部分。kotlin插件对语言部分提供支持，`kotlin-stdlib`对库部分提供支持。哪怕HelloWorld中使用的`println`也在库中。所以是Kotlin项目的必选依赖
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compile "ch.qos.logback:logback-classic:1.2.3"
+    compile "org.freedesktop.gstreamer:gst1-java-core:0.9.3"
+    compile "uk.co.caprica:vlcj:3.10.1"
+    compile 'no.tornado:tornadofx:1.7.17'
+    compile group: 'commons-io', name: 'commons-io', version: '2.6'
+}
+
+// 项目仓库
+repositories {
+    // Maven中心仓库墙内版
+    maven { url "https://maven.aliyun.com/repository/central" }
+    // jCenter中心仓库墙内版
+    maven { url "https://maven.aliyun.com/repository/jcenter" }
+}
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
