@@ -1,9 +1,13 @@
 import javafx.application.Application
 import javafx.collections.ObservableList
+import javafx.scene.control.Label
+import org.apache.commons.io.FileUtils
 import org.apache.commons.io.FilenameUtils
 import tornadofx.*
 import uk.co.caprica.vlcj.component.AudioMediaPlayerComponent
 import uk.co.caprica.vlcj.player.MediaPlayer
+import java.io.File
+import java.nio.charset.Charset
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -23,21 +27,29 @@ class MainView : View() {
     private val mainController: MainController by inject()
     private val musics = mainController.loadMusics()
     private val player = mainController.loadPlayer()
+    private lateinit var musicLabel: Label
 
-    override val root = tableview(musics) {
-        minWidth = 600.0
-        minHeight = 400.0
-        column("Artist", Music::artist) {
-            maxWidth = 200.0
+    override val root = hbox {
+        tableview(musics) {
+            minWidth = 800.0
+            minHeight = 600.0
+            column("Artist", Music::artist) {
+                maxWidth = 200.0
+            }
+            column("Title", Music::title)
+            onUserSelect {
+                player.playMedia(it.filename)
+                val lrcFilename = it.filename.replace(Regex("\\.[^.]+$"), ".lrc")
+                println(lrcFilename)
+                val lrcText = FileUtils.readFileToString(File(lrcFilename), Charset.forName("GBK"))
+                println(lrcText)
+                musicLabel.text = lrcText
+            }
         }
-        column("Title", Music::title)
-        onUserSelect {
-            player.playMedia(it.filename)
+        label("Lyric show") {
+            musicLabel = this
+            minWidth = 400.0
         }
-    }
-
-    init {
-        musics.addAll(mainController.loadMusics())
     }
 }
 
