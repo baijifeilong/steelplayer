@@ -3,6 +3,7 @@ import javafx.collections.ObservableList
 import javafx.scene.control.Label
 import javafx.scene.control.ProgressBar
 import javafx.scene.control.Slider
+import javafx.scene.control.TableView
 import javafx.scene.layout.Priority
 import javafx.scene.paint.Color
 import org.apache.commons.io.FileUtils
@@ -36,30 +37,32 @@ class MainView : View() {
     private lateinit var slider: Slider
     private lateinit var progressBar: ProgressBar
     private lateinit var musicLabel: Label
+    private lateinit var tableView: TableView<Music>
 
     override val root = vbox {
+        minWidth = 900.0
+        minHeight = 600.0
         hbox {
-            minWidth = 800.0
+            vgrow = Priority.ALWAYS
             tableview(musics) {
+                tableView = this
+                columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
+                prefWidth = .0
+                maxWidth = Double.POSITIVE_INFINITY
                 hgrow = Priority.ALWAYS
-                column("Artist", Music::artist) {
-                    hgrow = Priority.NEVER
-                    maxWidth = 200.0
-                }
-                column("Title", Music::title) {
-                    hgrow = Priority.ALWAYS
-                }
+                column("Artist", Music::artist)
+                column("Title", Music::title)
                 onUserSelect {
                     player.playMedia(it.filename)
                     player.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-                        override fun paused(mediaPlayer: MediaPlayer?) {
-                            super.paused(mediaPlayer)
-                        }
-
+                        private var lastPosition = .0f
                         override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
                             super.positionChanged(mediaPlayer, newPosition)
-                            slider.value = newPosition.toDouble()
-                            println("Position: $newPosition")
+                            if (abs(newPosition - lastPosition) * player.length > 300) {
+                                slider.value = newPosition.toDouble()
+                                println("Position changed: ${newPosition - lastPosition}")
+                                lastPosition = newPosition
+                            }
                         }
                     })
                     val lrcFilename = it.filename.replace(Regex("\\.[^.]+$"), ".lrc")
@@ -70,24 +73,29 @@ class MainView : View() {
                 }
             }
             label("Lyric show") {
+                prefWidth = .0
+                maxWidth = Double.POSITIVE_INFINITY
                 hgrow = Priority.ALWAYS
                 musicLabel = this
             }
-            button("Click me") {
+        }
+
+        hbox {
+            button("Play/Pause") {
                 setOnMouseClicked {
                     player.setPause(player.isPlaying)
                 }
             }
-        }
-
-        stackpane {
-            progressbar(initialValue = .0) {
-                progressBar = this
-                maxWidth = Double.MAX_VALUE
-            }
-            slider(max = 1) {
-                slider = this
-                maxWidth = Double.MAX_VALUE
+            stackpane {
+                hgrow = Priority.ALWAYS
+                progressbar(initialValue = .0) {
+                    progressBar = this
+                    maxWidth = Double.MAX_VALUE
+                }
+                slider(max = 1) {
+                    slider = this
+                    maxWidth = Double.MAX_VALUE
+                }
             }
         }
     }
@@ -100,6 +108,7 @@ class MainView : View() {
         slider.valueProperty().addListener { observable, oldValue, newValue ->
             if (abs(newValue.toDouble() - oldValue.toDouble()) * player.length > 999) {
                 player.position = newValue.toFloat()
+                println("Slider changed: ${newValue.toDouble() - oldValue.toDouble()}")
             }
         }
     }
