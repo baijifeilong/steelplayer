@@ -5,6 +5,8 @@ buildscript {
     dependencies {
         // Kotlin插件对应的包
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.10"
+
+        classpath "com.github.jengelman.gradle.plugins:shadow:4.0.2"
     }
 
     // 插件仓库。墙外人可直接用`mavencentral`、`jcenter`
@@ -21,6 +23,8 @@ apply plugin: 'application'
 // 此插件对Kotlin语言提供了支持，可以编译Kotlin文件
 apply plugin: 'kotlin'
 
+apply plugin: 'com.github.johnrengelman.shadow'
+
 // application插件run的入口class
 mainClassName = 'AppKt'
 
@@ -33,6 +37,7 @@ dependencies {
     compile "uk.co.caprica:vlcj:3.10.1"
     compile 'no.tornado:tornadofx:1.7.17'
     compile group: 'commons-io', name: 'commons-io', version: '2.6'
+    compile group: 'org.controlsfx', name: 'controlsfx', version: '8.40.14'
 }
 
 // 项目仓库

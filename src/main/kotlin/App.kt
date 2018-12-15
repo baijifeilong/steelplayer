@@ -1,6 +1,7 @@
 import com.sun.javafx.scene.control.skin.TableViewSkin
 import com.sun.javafx.scene.control.skin.VirtualFlow
 import javafx.application.Application
+import javafx.beans.property.ReadOnlyObjectWrapper
 import javafx.collections.ObservableList
 import javafx.geometry.Pos
 import javafx.scene.control.*
@@ -9,8 +10,12 @@ import javafx.scene.paint.Color
 import javafx.scene.text.Text
 import javafx.scene.text.TextAlignment
 import javafx.scene.text.TextFlow
+import javafx.stage.WindowEvent
+import javafx.util.Duration
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.FilenameUtils
+import org.controlsfx.glyphfont.FontAwesome
+import org.controlsfx.glyphfont.Glyph
 import tornadofx.*
 import uk.co.caprica.vlcj.component.AudioMediaPlayerComponent
 import uk.co.caprica.vlcj.player.MediaPlayer
@@ -45,7 +50,7 @@ fun parseLyric(text: String): TreeMap<Int, String> {
         }
     }
 
-    return lyricMap;
+    return lyricMap
 }
 
 class Music(artist: String, title: String, filename: String) {
@@ -66,9 +71,10 @@ class MainView : View() {
     private lateinit var progressBar: ProgressBar
     private lateinit var textFlow: TextFlow
     private lateinit var tableView: TableView<Music>
-    private lateinit var lyricMap: TreeMap<Int, String>
+    private var lyricMap: TreeMap<Int, String> = TreeMap()
     private lateinit var scrollPane: ScrollPane
     private lateinit var label: Label
+    private lateinit var button: Button
 
     private fun calculateLyricIndex(lyricMap: TreeMap<Int, String>): Int {
         val position = player.length * player.position
@@ -92,6 +98,7 @@ class MainView : View() {
         lyricMap = parseLyric(lrcText)
 
         player.playMedia(music.filename)
+        title = "${music.artist}:${music.title} - SteelPlayer"
         refreshLyric()
     }
 
@@ -106,6 +113,7 @@ class MainView : View() {
     }
 
     fun refreshLyric() {
+        if (lyricMap.isEmpty()) return
         println("Refreshing...")
         val position = calculateLyricIndex(lyricMap)
         println("LYRIC POSITION: $position")
@@ -127,6 +135,10 @@ class MainView : View() {
         }
         val visibleRows = (scrollPane.heightProperty().get() / textFlow.heightProperty().get()) * lyricMap.size
         scrollPane.vvalue = (lyricMap.keys.indexOf(position).toDouble() - visibleRows / 2) / (lyricMap.size - visibleRows)
+    }
+
+    private fun refreshLayout() {
+        button.graphic = Glyph.create("FontAwesome|" + if (player.isPlaying) FontAwesome.Glyph.PAUSE else (FontAwesome.Glyph.PLAY)).color(Color.GREEN).size(40.0)
     }
 
     override val root = vbox {
@@ -176,13 +188,16 @@ class MainView : View() {
 
         hbox {
             alignment = Pos.CENTER_LEFT
-            button("Play/Pause") {
-                setOnMouseClicked {
+            button {
+                button = this
+                graphic = Glyph.create("FontAwesome|" + FontAwesome.Glyph.PLAY).color(Color.GREEN).size(40.0)
+                action {
                     player.setPause(player.isPlaying)
                 }
             }
-            button("Next") {
-                setOnMouseClicked {
+            button {
+                graphic = Glyph.create("FontAwesome|" + FontAwesome.Glyph.STEP_FORWARD).color(Color.GREEN).size(40.0)
+                action {
                     playNext()
                 }
             }
@@ -199,6 +214,9 @@ class MainView : View() {
             }
             label("00:00/00:00") {
                 label = this
+                style {
+                    paddingRight = 10
+                }
             }
         }
     }
@@ -209,6 +227,23 @@ class MainView : View() {
         progressBar.paddingLeftProperty.bind(progressBar.heightProperty().divide(2))
         progressBar.paddingRightProperty.bind(progressBar.heightProperty().divide(2))
 
+        val tableColumn = TableColumn<Music, Music>("#")
+        tableColumn.setCellValueFactory {
+            return@setCellValueFactory ReadOnlyObjectWrapper(it.value)
+        }
+        tableColumn.setCellFactory {
+            return@setCellFactory object : TableCell<Music, Music>() {
+                override fun updateItem(item: Music?, empty: Boolean) {
+                    super.updateItem(item, empty)
+                    text = if (this.tableRow != null && item != null) this.tableRow.index.plus(1).toString() else ""
+                }
+            }
+        }
+        tableColumn.isSortable = false
+        tableColumn.maxWidth = 80.0
+        tableColumn.minWidth = 80.0
+        tableView.columns.add(0, tableColumn)
+
         slider.valueProperty().addListener { _, oldValue, newValue ->
             if (abs(newValue.toDouble() - oldValue.toDouble()) * player.length > 500) {
                 player.position = newValue.toFloat()
@@ -216,11 +251,20 @@ class MainView : View() {
             }
         }
 
+        primaryStage.widthProperty().onChange {
+            refreshLyric()
+        }
+
         player.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
             private var lastPosition = -1.0f
             override fun stopped(mediaPlayer: MediaPlayer?) {
                 super.stopped(mediaPlayer)
-                playNext()
+                runLater { playNext() }
+            }
+
+            override fun mediaStateChanged(mediaPlayer: MediaPlayer?, newState: Int) {
+                super.mediaStateChanged(mediaPlayer, newState)
+                runLater { refreshLayout() }
             }
 
             override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
@@ -231,9 +275,7 @@ class MainView : View() {
                     lastPosition = newPosition
                     val total = (player.length / 1000).toInt()
                     val current = (total * newPosition).roundToInt()
-                    val text = "%02d:%02d/%02d:%02d".format(
-                            current / 60, current % 60, total / 60, total % 60
-                    )
+                    val text = "%02d:%02d/%02d:%02d".format(current / 60, current % 60, total / 60, total % 60)
                     runLater {
                         label.text = text
                         refreshLyric()
@@ -241,6 +283,13 @@ class MainView : View() {
                 }
             }
         })
+
+        primaryStage.addEventHandler(WindowEvent.WINDOW_SHOWN) {
+            playNext()
+            runLater(Duration(200.0)) {
+                player.pause()
+            }
+        }
     }
 }
 
@@ -263,15 +312,20 @@ class MainStylesheet : Stylesheet() {
                     backgroundColor = MultiValue(arrayOf(Color.TRANSPARENT))
                 }
             }
+            button {
+                backgroundColor = MultiValue(arrayOf(Color.TRANSPARENT))
+                hover {
+                    backgroundColor = MultiValue(arrayOf(Color(0.90, 0.90, 0.90, 0.99)))
+                }
+            }
         }
     }
 }
 
 class MainController : Controller() {
-    val fontSize = 20.px
     fun loadMusics(): ObservableList<Music> {
         val matcher = FileSystems.getDefault().getPathMatcher("glob:**.{wma,mp3}")
-        return Files.walk(Paths.get("/mnt/d/music/test"))
+        return Files.walk(Paths.get("/mnt/d/music/fav"))
                 .filter { Files.isRegularFile(it) }
                 .filter { matcher.matches(it) }
                 .map {
