@@ -1,11 +1,14 @@
 import javafx.application.Application
 import javafx.collections.ObservableList
-import javafx.scene.control.Label
 import javafx.scene.control.ProgressBar
+import javafx.scene.control.ScrollPane
 import javafx.scene.control.Slider
 import javafx.scene.control.TableView
 import javafx.scene.layout.Priority
 import javafx.scene.paint.Color
+import javafx.scene.text.Text
+import javafx.scene.text.TextAlignment
+import javafx.scene.text.TextFlow
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.FilenameUtils
 import tornadofx.*
@@ -17,8 +20,31 @@ import java.nio.charset.Charset
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.*
+import java.util.regex.Pattern
 import kotlin.math.abs
 import kotlin.streams.toList
+
+fun parseLyric(text: String): TreeMap<Int, String> {
+    val lyricMap = TreeMap<Int, String>()
+    val lyricRegex = Pattern.compile("((\\[\\d+:\\d+\\.\\d+])+)([^\\[\\]]+)")
+    for (line in text.split(Pattern.compile("[\r\n]+"))) {
+        println("[Lyric] $line")
+        val matcher = lyricRegex.matcher(line)
+        if (!matcher.matches()) continue
+        val timePart = matcher.group(1)
+        val lyricPart = matcher.group(3).trim()
+        if (lyricPart.isEmpty()) continue
+        for (i in 0 until timePart.length step 10) {
+            val timeString = timePart.substring(i + 1, i + 9)
+            val parts = timeString.split(":", ".").map { it.toInt() }
+            val millis = parts[0] * 60 * 1000 + parts[1] * 1000 + parts[2]
+            lyricMap[millis] = lyricPart
+        }
+    }
+
+    return lyricMap;
+}
 
 class Music(artist: String, title: String, filename: String) {
     var artist: String by property(artist)
@@ -36,8 +62,42 @@ class MainView : View() {
     private val player = mainController.loadPlayer()
     private lateinit var slider: Slider
     private lateinit var progressBar: ProgressBar
-    private lateinit var musicLabel: Label
+    private lateinit var textFlow: TextFlow
     private lateinit var tableView: TableView<Music>
+    private lateinit var lyricMap: TreeMap<Int, String>
+    private lateinit var scrollPane: ScrollPane
+
+    fun calculateLyricIndex(lyricMap: TreeMap<Int, String>): Int {
+        val position = player.length * player.position
+        val beginPosition = lyricMap.keys.first()
+        val endPosition = lyricMap.keys.last()
+
+        if (position < beginPosition) return beginPosition
+        var lastPosition = beginPosition
+        for (k in lyricMap.keys) {
+            if (k >= position) {
+                return lastPosition
+            }
+            lastPosition = k
+        }
+        return endPosition
+    }
+
+    fun refreshLyric() {
+        println("Refreshing...")
+        val position = calculateLyricIndex(lyricMap)
+        println("LYRIC POSITION: $position")
+        textFlow.children.clear()
+        lyricMap.forEach { k, v ->
+            textFlow.children.add(Text(v + "\n").apply {
+                if (k == position) {
+                    fill = Color.RED
+                }
+            })
+        }
+        val visibleRows = (scrollPane.heightProperty().get() / textFlow.heightProperty().get()) * lyricMap.size
+        scrollPane.vvalue = (lyricMap.keys.indexOf(position).toDouble() - visibleRows / 2) / (lyricMap.size - visibleRows)
+    }
 
     override val root = vbox {
         minWidth = 900.0
@@ -52,31 +112,47 @@ class MainView : View() {
                 hgrow = Priority.ALWAYS
                 column("Artist", Music::artist)
                 column("Title", Music::title)
-                onUserSelect {
-                    player.playMedia(it.filename)
+                onUserSelect { music ->
+                    player.playMedia(music.filename)
                     player.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-                        private var lastPosition = .0f
+                        private var lastPosition = -1.0f
                         override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
                             super.positionChanged(mediaPlayer, newPosition)
-                            if (abs(newPosition - lastPosition) * player.length > 300) {
+                            if (abs(newPosition - lastPosition) * player.length > 100) {
                                 slider.value = newPosition.toDouble()
                                 println("Position changed: ${newPosition - lastPosition}")
                                 lastPosition = newPosition
+                                runLater {
+                                    refreshLyric()
+                                }
                             }
                         }
                     })
-                    val lrcFilename = it.filename.replace(Regex("\\.[^.]+$"), ".lrc")
+                    val lrcFilename = music.filename.replace(Regex("\\.[^.]+$"), ".lrc")
                     println(lrcFilename)
                     val lrcText = FileUtils.readFileToString(File(lrcFilename), Charset.forName("GBK"))
                     println(lrcText)
-                    musicLabel.text = lrcText
+
+                    lyricMap = parseLyric(lrcText)
+                    refreshLyric()
                 }
             }
-            label("Lyric show") {
+
+            scrollpane {
+                scrollPane = this
                 prefWidth = .0
                 maxWidth = Double.POSITIVE_INFINITY
                 hgrow = Priority.ALWAYS
-                musicLabel = this
+                style {
+                    fitToWidth = true
+                }
+                textflow {
+                    textFlow = this
+                    text { text = "Lyric show" }
+                    style {
+                        textAlignment = TextAlignment.CENTER
+                    }
+                }
             }
         }
 
@@ -105,8 +181,8 @@ class MainView : View() {
         progressBar.paddingLeftProperty.bind(progressBar.heightProperty().divide(2))
         progressBar.paddingRightProperty.bind(progressBar.heightProperty().divide(2))
 
-        slider.valueProperty().addListener { observable, oldValue, newValue ->
-            if (abs(newValue.toDouble() - oldValue.toDouble()) * player.length > 999) {
+        slider.valueProperty().addListener { _, oldValue, newValue ->
+            if (abs(newValue.toDouble() - oldValue.toDouble()) * player.length > 500) {
                 player.position = newValue.toFloat()
                 println("Slider changed: ${newValue.toDouble() - oldValue.toDouble()}")
             }
@@ -117,7 +193,7 @@ class MainView : View() {
 class MainStylesheet : Stylesheet() {
     init {
         root {
-            fontFamily = "Noto Sans CJK SC Medium"
+            fontFamily = "Noto Sans CJK SC Regular"
             fontSize = 20.px
             slider {
                 track {
