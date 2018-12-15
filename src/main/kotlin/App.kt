@@ -23,6 +23,7 @@ import java.nio.file.Paths
 import java.util.*
 import java.util.regex.Pattern
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.streams.toList
 
@@ -111,8 +112,16 @@ class MainView : View() {
         textFlow.children.clear()
         lyricMap.forEach { k, v ->
             textFlow.children.add(Text(v + "\n").apply {
+                val rate = max(currentStage!!.width / 1000, 1.0)
                 if (k == position) {
-                    fill = Color.RED
+                    style {
+                        fontSize = 28.px * rate
+                        fill = Color.GREEN
+                    }
+                } else {
+                    style {
+                        fontSize = 24.px * rate
+                    }
                 }
             })
         }
@@ -236,9 +245,10 @@ class MainView : View() {
 }
 
 class MainStylesheet : Stylesheet() {
+
     init {
         root {
-            fontFamily = "Noto Sans CJK SC Regular"
+            fontFamily = "Noto Sans CJK SC Medium"
             fontSize = 20.px
             tableView {
                 focusColor = Color.TRANSPARENT
@@ -258,6 +268,7 @@ class MainStylesheet : Stylesheet() {
 }
 
 class MainController : Controller() {
+    val fontSize = 20.px
     fun loadMusics(): ObservableList<Music> {
         val matcher = FileSystems.getDefault().getPathMatcher("glob:**.{wma,mp3}")
         return Files.walk(Paths.get("/mnt/d/music/test"))
