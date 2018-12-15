@@ -1,9 +1,9 @@
+import com.sun.javafx.scene.control.skin.TableViewSkin
+import com.sun.javafx.scene.control.skin.VirtualFlow
 import javafx.application.Application
 import javafx.collections.ObservableList
-import javafx.scene.control.ProgressBar
-import javafx.scene.control.ScrollPane
-import javafx.scene.control.Slider
-import javafx.scene.control.TableView
+import javafx.geometry.Pos
+import javafx.scene.control.*
 import javafx.scene.layout.Priority
 import javafx.scene.paint.Color
 import javafx.scene.text.Text
@@ -23,6 +23,7 @@ import java.nio.file.Paths
 import java.util.*
 import java.util.regex.Pattern
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.streams.toList
 
 fun parseLyric(text: String): TreeMap<Int, String> {
@@ -66,8 +67,9 @@ class MainView : View() {
     private lateinit var tableView: TableView<Music>
     private lateinit var lyricMap: TreeMap<Int, String>
     private lateinit var scrollPane: ScrollPane
+    private lateinit var label: Label
 
-    fun calculateLyricIndex(lyricMap: TreeMap<Int, String>): Int {
+    private fun calculateLyricIndex(lyricMap: TreeMap<Int, String>): Int {
         val position = player.length * player.position
         val beginPosition = lyricMap.keys.first()
         val endPosition = lyricMap.keys.last()
@@ -81,6 +83,25 @@ class MainView : View() {
             lastPosition = k
         }
         return endPosition
+    }
+
+    private fun play(music: Music) {
+        val lrcFilename = music.filename.replace(Regex("\\.[^.]+$"), ".lrc")
+        val lrcText = FileUtils.readFileToString(File(lrcFilename), Charset.forName("GBK"))
+        lyricMap = parseLyric(lrcText)
+
+        player.playMedia(music.filename)
+        refreshLyric()
+    }
+
+    private fun playNext() {
+        val virtualFlow = (tableView.skin as TableViewSkin<*>).children[1] as VirtualFlow<*>
+        val visibleRows = virtualFlow.lastVisibleCell.index - virtualFlow.firstVisibleCell.index
+
+        val music = musics.random()
+        tableView.selectionModel.select(music)
+        tableView.scrollTo(tableView.selectionModel.selectedIndex - (visibleRows / 2))
+        play(music)
     }
 
     fun refreshLyric() {
@@ -112,30 +133,7 @@ class MainView : View() {
                 hgrow = Priority.ALWAYS
                 column("Artist", Music::artist)
                 column("Title", Music::title)
-                onUserSelect { music ->
-                    player.playMedia(music.filename)
-                    player.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-                        private var lastPosition = -1.0f
-                        override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
-                            super.positionChanged(mediaPlayer, newPosition)
-                            if (abs(newPosition - lastPosition) * player.length > 100) {
-                                slider.value = newPosition.toDouble()
-                                println("Position changed: ${newPosition - lastPosition}")
-                                lastPosition = newPosition
-                                runLater {
-                                    refreshLyric()
-                                }
-                            }
-                        }
-                    })
-                    val lrcFilename = music.filename.replace(Regex("\\.[^.]+$"), ".lrc")
-                    println(lrcFilename)
-                    val lrcText = FileUtils.readFileToString(File(lrcFilename), Charset.forName("GBK"))
-                    println(lrcText)
-
-                    lyricMap = parseLyric(lrcText)
-                    refreshLyric()
-                }
+                onUserSelect { play(it) }
             }
 
             scrollpane {
@@ -145,6 +143,8 @@ class MainView : View() {
                 hgrow = Priority.ALWAYS
                 style {
                     fitToWidth = true
+                    hbarPolicy = ScrollPane.ScrollBarPolicy.NEVER
+                    vbarPolicy = ScrollPane.ScrollBarPolicy.NEVER
                 }
                 textflow {
                     textFlow = this
@@ -152,14 +152,29 @@ class MainView : View() {
                     style {
                         textAlignment = TextAlignment.CENTER
                     }
+                    setOnMouseClicked {
+                        if (it.pickResult.intersectedNode is TextFlow) return@setOnMouseClicked
+                        val index = ((it.y / this.height) * (lyricMap.size - 1)).roundToInt()
+                        val position = lyricMap.keys.toList()[index]
+                        println("====position: $position")
+                        val percent = position.toFloat() / player.length
+                        println(percent)
+                        player.position = percent
+                    }
                 }
             }
         }
 
         hbox {
+            alignment = Pos.CENTER_LEFT
             button("Play/Pause") {
                 setOnMouseClicked {
                     player.setPause(player.isPlaying)
+                }
+            }
+            button("Next") {
+                setOnMouseClicked {
+                    playNext()
                 }
             }
             stackpane {
@@ -173,10 +188,14 @@ class MainView : View() {
                     maxWidth = Double.MAX_VALUE
                 }
             }
+            label("00:00/00:00") {
+                label = this
+            }
         }
     }
 
     init {
+        title = "Steel Player"
         progressBar.progressProperty().bind(slider.valueProperty())
         progressBar.paddingLeftProperty.bind(progressBar.heightProperty().divide(2))
         progressBar.paddingRightProperty.bind(progressBar.heightProperty().divide(2))
@@ -187,6 +206,32 @@ class MainView : View() {
                 println("Slider changed: ${newValue.toDouble() - oldValue.toDouble()}")
             }
         }
+
+        player.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
+            private var lastPosition = -1.0f
+            override fun stopped(mediaPlayer: MediaPlayer?) {
+                super.stopped(mediaPlayer)
+                playNext()
+            }
+
+            override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
+                super.positionChanged(mediaPlayer, newPosition)
+                if (abs(newPosition - lastPosition) * player.length > 100) {
+                    slider.value = newPosition.toDouble()
+                    println("Position changed: ${newPosition - lastPosition}")
+                    lastPosition = newPosition
+                    val total = (player.length / 1000).toInt()
+                    val current = (total * newPosition).roundToInt()
+                    val text = "%02d:%02d/%02d:%02d".format(
+                            current / 60, current % 60, total / 60, total % 60
+                    )
+                    runLater {
+                        label.text = text
+                        refreshLyric()
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -195,6 +240,14 @@ class MainStylesheet : Stylesheet() {
         root {
             fontFamily = "Noto Sans CJK SC Regular"
             fontSize = 20.px
+            tableView {
+                focusColor = Color.TRANSPARENT
+                faintFocusColor = Color.TRANSPARENT
+            }
+            scrollPane {
+                focusColor = Color.TRANSPARENT
+                faintFocusColor = Color.TRANSPARENT
+            }
             slider {
                 track {
                     backgroundColor = MultiValue(arrayOf(Color.TRANSPARENT))
