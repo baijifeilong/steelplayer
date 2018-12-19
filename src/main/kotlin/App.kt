@@ -270,13 +270,13 @@ class MainView : View() {
             override fun positionChanged(mediaPlayer: MediaPlayer?, newPosition: Float) {
                 super.positionChanged(mediaPlayer, newPosition)
                 if (abs(newPosition - lastPosition) * player.length > 100) {
-                    slider.value = newPosition.toDouble()
                     println("Position changed: ${newPosition - lastPosition}")
                     lastPosition = newPosition
                     val total = (player.length / 1000).toInt()
                     val current = (total * newPosition).roundToInt()
                     val text = "%02d:%02d/%02d:%02d".format(current / 60, current % 60, total / 60, total % 60)
                     runLater {
+                        slider.value = newPosition.toDouble()
                         label.text = text
                         refreshLyric()
                     }
@@ -289,6 +289,10 @@ class MainView : View() {
             runLater(Duration(200.0)) {
                 player.pause()
             }
+        }
+
+        primaryStage.setOnCloseRequest {
+            player.release()
         }
     }
 }
@@ -325,7 +329,7 @@ class MainStylesheet : Stylesheet() {
 class MainController : Controller() {
     fun loadMusics(): ObservableList<Music> {
         val matcher = FileSystems.getDefault().getPathMatcher("glob:**.{wma,mp3}")
-        return Files.walk(Paths.get("/mnt/d/music/fav"))
+        return Files.walk(Paths.get("/Volumes/repo/music/fav"))
                 .filter { Files.isRegularFile(it) }
                 .filter { matcher.matches(it) }
                 .map {
