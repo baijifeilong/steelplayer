@@ -329,7 +329,8 @@ class MainStylesheet : Stylesheet() {
 class MainController : Controller() {
     fun loadMusics(): ObservableList<Music> {
         val matcher = FileSystems.getDefault().getPathMatcher("glob:**.{wma,mp3}")
-        return Files.walk(Paths.get("/Volumes/repo/music/fav"))
+        val musicRoot = System.getProperty("music.root", "${System.getProperty("user.home")}/Dropbox/sample/music")
+        return Files.walk(Paths.get(musicRoot))
                 .filter { Files.isRegularFile(it) }
                 .filter { matcher.matches(it) }
                 .map {

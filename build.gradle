@@ -51,3 +51,7 @@ repositories {
 compileKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+run {
+    systemProperties System.getProperties()
+}
